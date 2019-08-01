@@ -19,7 +19,7 @@ public class TimeUtil {
         if(seconds == null || seconds.isEmpty() || seconds.equals("null")){
             return "";
         }
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd ");
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
         String date = sdf.format(new Timestamp(Long.valueOf(seconds + "000")));
 
