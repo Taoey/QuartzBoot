@@ -2,6 +2,7 @@ package com.tao.modules.quartz.service;
 
 import com.tao.modules.common.ScanPackageUtil;
 import com.tao.modules.common.annotation.TaoTask;
+import com.tao.pojo.entity.Task;
 import org.quartz.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,8 +28,8 @@ public class QuartzTaskService {
      * 规定：任务类必须以Task开头，以Service结尾
      * @return
      */
-    public List<Map> scanTask(){
-        List<Map> result = new ArrayList<>();
+    public List<Task> scanTask(){
+        List<Task> result = new ArrayList<>();
         String packageName = "com.tao.modules.quartz.task.service";
         List<String> classList = ScanPackageUtil.scanClass(packageName);
         for(String className:classList){
@@ -40,8 +41,8 @@ public class QuartzTaskService {
             Pattern pattern = Pattern.compile(patternString);
             Matcher matcher = pattern.matcher(clazz);
             if(matcher.find()){
-                List<Map> maps = this.scanClass(className);
-                result.addAll(maps);
+                List<Task> tasks = this.scanClass(className);
+                result.addAll(tasks);
             }
         }
         return result;
@@ -53,18 +54,21 @@ public class QuartzTaskService {
      * @param clazz
      * @return
      */
-    public List<Map> scanClass(String clazz){
-        List<Map> result = new ArrayList<>();
+    public List<Task> scanClass(String clazz){
+        List<Task> result = new ArrayList<>();
         try {
             Class<?> aClass = Class.forName(clazz);
             Method[] methods = aClass.getMethods();
             for (Method method:methods){
                 TaoTask annotation = method.getAnnotation(TaoTask.class);
                 if(annotation!=null){
-                    Map<String,String> tempMap = new HashMap<>();
-                    tempMap.put("name",annotation.name());
-                    //TODO other args
-                    result.add(tempMap);
+                    Task tempTask = new Task();
+                    tempTask.setName(annotation.name());
+                    tempTask.setBean(clazz);
+                    tempTask.setMethod(method.getName());
+                    tempTask.setDefaultCron(annotation.corn());
+
+                    result.add(tempTask);
                 }
             }
         } catch (ClassNotFoundException e) {
@@ -78,23 +82,35 @@ public class QuartzTaskService {
      * @param taskInfoList
      * @return
      */
-    public String buildTask(List<Map> taskInfoList){
-        try {
-            JobDetail jobDetail = JobBuilder.newJob(TaskJob.class)
-                    .withIdentity("PrintJob", "group1")
-                    .build();
+    public String buildTask(List<Task> taskInfoList){
 
-            Trigger trigger = TriggerBuilder.newTrigger().withIdentity("trigger1", "triggerGroup1")
-                    .startNow()//立即生效
-                    .withSchedule(SimpleScheduleBuilder.simpleSchedule()
-                            .withIntervalInSeconds(1)//每隔1s执行一次
-                            .repeatForever()).build();//一直执行
+        for(int i=0;i<taskInfoList.size();i++){
+            Task taskInfo = taskInfoList.get(i);
+            //开始构建一个job并进行触发
+            try {
+                JobDetail jobDetail = JobBuilder.newJob(TaskJob.class)
+                        .withIdentity(taskInfo.getBean()+"-"+taskInfo.getMethod()+"Job", taskInfo.getBean())
+                        .build();
+                Map<String,String> taskMap = new HashMap<>();
+                taskMap.put("name",taskInfo.getName());
+                taskMap.put("bean",taskInfo.getBean());
+                taskMap.put("method",taskInfo.getMethod());
 
-            scheduler.scheduleJob(jobDetail, trigger);
+                jobDetail.getJobDataMap().put("task",taskMap);
 
-        } catch (SchedulerException e) {
-            e.printStackTrace();
+                //构建触发器：name为"bean-method",group为method
+                Trigger trigger = TriggerBuilder.newTrigger().withIdentity(taskInfo.getBean()+"-"+taskInfo.getMethod(),
+                        taskInfo.getBean())
+                        .startNow()//立即生效
+                        .withSchedule(CronScheduleBuilder.cronSchedule(taskInfo.getDefaultCron()))
+                        .build();
+
+                scheduler.scheduleJob(jobDetail, trigger);
+
+            } catch (SchedulerException e) {
+                e.printStackTrace();
+            }
         }
-        return null;
+        return "OK";
     }
 }

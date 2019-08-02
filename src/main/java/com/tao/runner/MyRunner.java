@@ -16,6 +16,6 @@ public class MyRunner implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         System.out.println("----------定时任务开始执行-----------");
-        quartzTaskService.buildTask(null);
+        quartzTaskService.buildTask(quartzTaskService.scanTask());
     }
 }
